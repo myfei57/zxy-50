@@ -6,6 +6,7 @@ func (s *Service) Calibrate(gaugeID string, offset float64) error {
 		return err
 	}
 	gauge.Offset = offset
+	gauge.StoredOffset = offset
 	s.mu.Lock()
 	s.gauges[gaugeID] = gauge
 	s.mu.Unlock()
