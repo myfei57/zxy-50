@@ -18,6 +18,8 @@ func NewBreakerPool(names []string) *BreakerPool {
 }
 
 func (p *BreakerPool) Allocate(pumpID string) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	for _, breaker := range p.names {
 		if _, ok := p.taken[breaker]; !ok {
 			p.taken[breaker] = pumpID

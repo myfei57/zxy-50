@@ -6,6 +6,8 @@ import (
 )
 
 func (c *Controller) StartPump(stationID string, pumpID string, reason string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	ref, err := c.StateOf(stationID, pumpID)
 	if err != nil {
 		return err
@@ -28,6 +30,7 @@ func (c *Controller) StartPump(stationID string, pumpID string, reason string) e
 	ref.BreakerID = breakerID
 	ref.Speed = "low"
 	if _, err := c.stations.SetPumpState(stationID, ref); err != nil {
+		c.stations.ReleaseBreaker(stationID, breakerID)
 		return err
 	}
 	return c.audits.Record(audit.Event{
@@ -39,6 +42,8 @@ func (c *Controller) StartPump(stationID string, pumpID string, reason string) e
 }
 
 func (c *Controller) StopPump(stationID string, pumpID string, reason string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	ref, err := c.StateOf(stationID, pumpID)
 	if err != nil {
 		return err

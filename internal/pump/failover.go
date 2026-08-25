@@ -6,6 +6,8 @@ import (
 )
 
 func (c *Controller) Failover(stationID string, primaryID string, snapshot station.LeadSnapshot) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	value, err := c.stations.Get(stationID)
 	if err != nil {
 		return err
@@ -44,6 +46,7 @@ func (c *Controller) Failover(stationID string, primaryID string, snapshot stati
 		return err
 	}
 	if err := c.startStandby(stationID, ref, breakerID, "failover"); err != nil {
+		c.stations.ReleaseBreaker(stationID, breakerID)
 		return err
 	}
 	return c.audits.Record(audit.Event{
