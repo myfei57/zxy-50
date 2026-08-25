@@ -1,0 +1,83 @@
+package dispatch
+
+import (
+	"sync"
+	"time"
+
+	"drainnet/internal/audit"
+	"drainnet/internal/station"
+)
+
+type ZoneRouter struct {
+	stations *station.Registry
+	cache    map[string]string
+	mu       sync.RWMutex
+}
+
+func NewZoneRouter(stations *station.Registry) *ZoneRouter {
+	return &ZoneRouter{stations: stations, cache: map[string]string{}}
+}
+
+func (z *ZoneRouter) Resolve(zoneID string) (string, error) {
+	z.mu.RLock()
+	cached, ok := z.cache[zoneID]
+	z.mu.RUnlock()
+	if ok {
+		return cached, nil
+	}
+	resolved, err := z.stations.StationForZone(zoneID)
+	if err != nil {
+		return "", err
+	}
+	z.mu.Lock()
+	z.cache[zoneID] = resolved
+	z.mu.Unlock()
+	return resolved, nil
+}
+
+func (d *Dispatcher) DispatchRain(zoneID string, mm float64, at time.Time) error {
+	stationID, err := d.router.Resolve(zoneID)
+	if err != nil {
+		return err
+	}
+	if err := d.ReserveQuota(stationID, mm); err != nil {
+		return err
+	}
+	gauges, err := d.rains.GaugesForStation(stationID)
+	if err != nil {
+		return err
+	}
+	started := false
+	for _, gauge := range gauges {
+		if _, err := d.rains.Accumulate(gauge.ID, mm, at); err != nil {
+			return err
+		}
+		peak, err := d.rains.PeakExceeded(gauge.ID, d.policies.Rules().PeakRainThreshold, at, d.policies.Rules().PeakWindow)
+		if err != nil {
+			return err
+		}
+		if peak {
+			lead, err := d.stations.LeadOf(stationID)
+			if err != nil {
+				return err
+			}
+			if err := d.pumps.StartPump(stationID, lead.ID, "rain"); err != nil {
+				return err
+			}
+			started = true
+		}
+	}
+	return d.audits.Record(audit.Event{
+		Type:     "dispatch.rain",
+		EntityID: zoneID,
+		Message:  "rain dispatched",
+		Meta:     map[string]string{"station": stationID, "mm": formatFloat(mm), "started": formatBool(started)},
+	})
+}
+
+func formatBool(value bool) string {
+	if value {
+		return "true"
+	}
+	return "false"
+}
