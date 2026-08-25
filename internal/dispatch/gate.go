@@ -10,13 +10,14 @@ func (d *Dispatcher) GatePlan(channelID string) ([]string, error) {
 		return nil, err
 	}
 	plan := make([]string, 0, len(gates))
+	// 规程：先开下游闸门放水，再开上游闸门，避免上游来水向低洼片区倒灌。
 	for _, gate := range gates {
-		if gate.Side == "upstream" {
+		if gate.Side == "downstream" {
 			plan = append(plan, gate.ID)
 		}
 	}
 	for _, gate := range gates {
-		if gate.Side == "downstream" {
+		if gate.Side == "upstream" {
 			plan = append(plan, gate.ID)
 		}
 	}
